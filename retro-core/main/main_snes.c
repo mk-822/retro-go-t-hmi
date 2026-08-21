@@ -364,7 +364,7 @@ void snes_main(void)
     }
 
     rg_system_set_tick_rate(Memory.ROMFramesPerSecond);
-    app->frameskip = 3;
+    app->frameskip = RG_APP_DEFAULT_FRAMESKIP(3);
 
     bool menuCancelled = false;
     bool menuPressed = false;

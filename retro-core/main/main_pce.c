@@ -244,7 +244,7 @@ void pce_main(void)
     }
 
     rg_system_set_tick_rate(60);
-    app->frameskip = 1;
+    app->frameskip = RG_APP_DEFAULT_FRAMESKIP(1);
 
     emulationPaused = false;
     RunPCE();

@@ -24,6 +24,11 @@
 #define RG_SCREEN_ROTATION          1
 #define RG_SCREEN_VISIBLE_AREA      {0, 0, 0, 0}
 #define RG_SCREEN_SAFE_AREA         {0, 0, 0, 0}
+
+// The T-HMI I80 path has enough transfer bandwidth for the native refresh rate. Disable the
+// emulator cores' conservative fixed frame skip; adaptive skipping remains available if a core
+// actually falls behind its timing budget.
+#define RG_FORCE_FULL_FRAMERATE      1
 #define RG_GPIO_LCD_CS              GPIO_NUM_6
 #define RG_GPIO_LCD_DC              GPIO_NUM_7
 #define RG_GPIO_LCD_WR              GPIO_NUM_8

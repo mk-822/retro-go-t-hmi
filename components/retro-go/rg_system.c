@@ -419,7 +419,7 @@ rg_app_t *rg_system_init(int sampleRate, const rg_handlers_t *handlers, void *_u
         .sampleRate = sampleRate,
         .tickRate = 60,
         .frameTime = 1000000 / 60,
-        .frameskip = 1, // This can be overriden on a per-app basis if needed, do not set 0 here!
+        .frameskip = RG_APP_DEFAULT_FRAMESKIP(1), // Per-app settings may override this baseline.
         .overclock = 0,
         .tickTimeout = 3000000,
         .lowMemoryMode = false,
@@ -1180,7 +1180,7 @@ void rg_system_set_overclock(int level)
     // ets_update_cpu_frequency(real_mhz);
 #endif
 
-    app.frameskip = 1;
+    app.frameskip = RG_APP_DEFAULT_FRAMESKIP(1);
 
     overclockLevel = level;
     overclockMhz = real_mhz;

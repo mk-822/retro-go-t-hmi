@@ -40,6 +40,16 @@
 #define RG_TARGET_ODROID_GO
 #endif
 
+#ifndef RG_FORCE_FULL_FRAMERATE
+#define RG_FORCE_FULL_FRAMERATE 0
+#endif
+
+#if RG_FORCE_FULL_FRAMERATE
+#define RG_APP_DEFAULT_FRAMESKIP(value) 0
+#else
+#define RG_APP_DEFAULT_FRAMESKIP(value) (value)
+#endif
+
 #ifndef RG_PROJECT_NAME
 #define RG_PROJECT_NAME "Retro-Go"
 #endif
