@@ -43,6 +43,7 @@
 #define RG_GPIO_LCD_BCKL            GPIO_NUM_38
 
 // T-HMI's ST7789 initialization. The panel expects RGB ordering for Retro-Go's surfaces.
+// MADCTL 0xA0 selects the landscape-flipped orientation while preserving RGB order.
 #define RG_SCREEN_INIT()                                                                                         \
     ILI9341_CMD(0xB2, 0x0C, 0x0C, 0x00, 0x33, 0x33);                                                            \
     ILI9341_CMD(0xB7, 0x35);                                                                                     \
@@ -53,7 +54,7 @@
     ILI9341_CMD(0xC4, 0x20);                                                                                     \
     ILI9341_CMD(0xC6, 0x0F);                                                                                     \
     ILI9341_CMD(0xD0, 0xA4, 0xA1);                                                                               \
-    ILI9341_CMD(0x36, 0x60);                                                                                     \
+    ILI9341_CMD(0x36, 0xA0);                                                                                      \
     ILI9341_CMD(0xB1, 0x00, 0x10);                                                                               \
     ILI9341_CMD(0xE0, 0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23);    \
     ILI9341_CMD(0xE1, 0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23);
