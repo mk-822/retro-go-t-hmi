@@ -8,6 +8,14 @@
 #ifdef ESP_PLATFORM
 #include <driver/gpio.h>
 #include <driver/adc.h>
+#if defined(RG_GAMEPAD_UART_ENABLE)
+#include <driver/uart.h>
+#endif
+#if defined(RG_GAMEPAD_USB_SERIAL_ENABLE)
+#include <driver/usb_serial_jtag_vfs.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 // This is a lazy way to silence deprecation notices on some esp-idf versions...
 // This hardcoded value is the first thing to check if something stops working!
 #define ADC_ATTEN_DB_11 3
@@ -42,6 +50,101 @@ static bool input_task_running = false;
 static uint32_t gamepad_state = -1; // _Atomic
 static uint32_t gamepad_mapped = 0;
 static rg_battery_t battery_state = {0};
+
+#if defined(RG_GAMEPAD_UART_ENABLE)
+typedef struct
+{
+    uint8_t phase;
+    uint8_t buttons;
+} rg_uart_parser_t;
+
+static rg_uart_parser_t uart_parser;
+static uint8_t uart_buttons;
+#if defined(RG_GAMEPAD_USB_SERIAL_ENABLE)
+static rg_uart_parser_t usb_serial_parser;
+static uint8_t usb_serial_buttons;
+static int usb_serial_fd = -1;
+#endif
+static uint8_t uart_no_data_count;
+
+static bool uart_process_byte(rg_uart_parser_t *parser, uint8_t *buttons_state, uint8_t byte)
+{
+    switch (parser->phase)
+    {
+    case 0:
+        if (byte == 0xF0)
+            parser->phase = 1;
+        break;
+    case 1:
+        parser->buttons = byte;
+        parser->phase = 2;
+        break;
+    default:
+        parser->phase = 0;
+        if (byte == parser->buttons)
+        {
+            *buttons_state = byte;
+            return true;
+        }
+        break;
+    }
+    return false;
+}
+
+static uint32_t uart_read_controller(void)
+{
+    bool received_packet = false;
+    uint8_t byte;
+
+    while (uart_read_bytes(RG_GAMEPAD_UART_PORT, &byte, 1, 0) == 1)
+        received_packet |= uart_process_byte(&uart_parser, &uart_buttons, byte);
+
+#if defined(RG_GAMEPAD_USB_SERIAL_ENABLE)
+    // The Anemoia Web Serial controller writes to the board's USB Serial/JTAG
+    // endpoint (the same COM port used for monitoring), not to UART1 GPIO43/44.
+    // Read it through the secondary console VFS so it can coexist with logs.
+    if (usb_serial_fd >= 0)
+    {
+        while (read(usb_serial_fd, &byte, 1) == 1)
+            received_packet |= uart_process_byte(&usb_serial_parser, &usb_serial_buttons, byte);
+    }
+#endif
+
+    if (received_packet)
+    {
+        uart_no_data_count = 0;
+    }
+    else if (uart_no_data_count < 10)
+    {
+        // Match Anemoia's UartControllerRead behavior: retain the last state for ten
+        // polling intervals, then release all keys if the controller has gone silent.
+        ++uart_no_data_count;
+        if (uart_no_data_count >= 10)
+        {
+            uart_buttons = 0;
+#if defined(RG_GAMEPAD_USB_SERIAL_ENABLE)
+            usb_serial_buttons = 0;
+#endif
+        }
+    }
+
+    uint8_t buttons = uart_buttons;
+#if defined(RG_GAMEPAD_USB_SERIAL_ENABLE)
+    buttons |= usb_serial_buttons;
+#endif
+
+    uint32_t state = 0;
+    if (buttons & (1 << 0)) state |= RG_KEY_A;
+    if (buttons & (1 << 1)) state |= RG_KEY_B;
+    if (buttons & (1 << 2)) state |= RG_KEY_SELECT;
+    if (buttons & (1 << 3)) state |= RG_KEY_START;
+    if (buttons & (1 << 4)) state |= RG_KEY_UP;
+    if (buttons & (1 << 5)) state |= RG_KEY_DOWN;
+    if (buttons & (1 << 6)) state |= RG_KEY_LEFT;
+    if (buttons & (1 << 7)) state |= RG_KEY_RIGHT;
+    return state;
+}
+#endif
 
 #define UPDATE_GLOBAL_MAP(keymap)                 \
     for (size_t i = 0; i < RG_COUNT(keymap); ++i) \
@@ -199,6 +302,10 @@ bool rg_input_read_gamepad_raw(uint32_t *out)
     }
 #endif
 
+#if defined(RG_GAMEPAD_UART_ENABLE)
+    state |= uart_read_controller();
+#endif
+
 #if defined(RG_GAMEPAD_VIRT_MAP)
     for (size_t i = 0; i < RG_COUNT(keymap_virt); ++i)
     {
@@ -332,6 +439,40 @@ void rg_input_init(void)
     gpio_set_level(RG_GPIO_GAMEPAD_LATCH, 0);
     gpio_set_level(RG_GPIO_GAMEPAD_CLOCK, 1);
     UPDATE_GLOBAL_MAP(keymap_serial);
+#endif
+
+#if defined(RG_GAMEPAD_UART_ENABLE)
+    RG_LOGI("Initializing Anemoia-compatible UART gamepad driver...");
+    const uart_config_t uart_config = {
+        .baud_rate = RG_GAMEPAD_UART_BAUD,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+    };
+    RG_ASSERT(uart_param_config(RG_GAMEPAD_UART_PORT, &uart_config) == ESP_OK,
+              "UART gamepad configuration failed");
+    RG_ASSERT(uart_set_pin(RG_GAMEPAD_UART_PORT, RG_GAMEPAD_UART_TX, RG_GAMEPAD_UART_RX,
+                           UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) == ESP_OK,
+              "UART gamepad pin configuration failed");
+    RG_ASSERT(uart_driver_install(RG_GAMEPAD_UART_PORT, 256, 0, 0, NULL, 0) == ESP_OK,
+              "UART gamepad driver installation failed");
+    vTaskDelay(pdMS_TO_TICKS(10));
+    uart_flush_input(RG_GAMEPAD_UART_PORT);
+    uart_parser = (rg_uart_parser_t){0};
+    uart_buttons = 0;
+#if defined(RG_GAMEPAD_USB_SERIAL_ENABLE)
+    // Disable CR/LF conversion because the controller packets are binary.
+    usb_serial_jtag_vfs_set_rx_line_endings(ESP_LINE_ENDINGS_LF);
+    usb_serial_fd = open("/dev/secondary", O_RDONLY | O_NONBLOCK);
+    if (usb_serial_fd < 0)
+        RG_LOGW("USB Serial/JTAG controller endpoint unavailable; UART1 remains active.");
+    usb_serial_parser = (rg_uart_parser_t){0};
+    usb_serial_buttons = 0;
+#endif
+    uart_no_data_count = 10;
+    gamepad_mapped |= RG_KEY_UP | RG_KEY_RIGHT | RG_KEY_DOWN | RG_KEY_LEFT |
+                      RG_KEY_SELECT | RG_KEY_START | RG_KEY_A | RG_KEY_B;
 #endif
 
 

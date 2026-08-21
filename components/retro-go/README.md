@@ -12,6 +12,7 @@ Retro-Go's shared library (or framework) provides an easy way to port emulators 
 | [esplay-micro](targets/esplay-micro/docs/README.md)           |   |
 | [esplay-s3](targets/esplay-s3/docs/README.md)                 | Broken |
 | [fri3d-2024](targets/fri3d-2024/docs/README.md)               |   |
+| [lilygo-t-hmi](targets/lilygo-t-hmi/README.md)                |   |
 | [mrgc-g32](targets/mrgc-g32/docs/README.md)                   | Official |
 | [mrgc-gbm](targets/mrgc-gbm/docs/README.md)                   |  |
 | [nullnano](targets/nullnano/docs/README.md)                   |  |
